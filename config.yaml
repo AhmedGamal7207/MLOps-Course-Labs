@@ -1,0 +1,2 @@
+# My Models Configurations
+col_transf_path: models/column_transformer_model.joblib
