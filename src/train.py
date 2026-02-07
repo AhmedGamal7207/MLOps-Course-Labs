@@ -19,7 +19,13 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay,
 )
 
-### Import MLflow
+### TODO Import MLflow
+import mlflow
+
+import logging
+from colorama import Fore, Style
+import joblib
+import os
 
 def rebalance(data):
     """
@@ -106,12 +112,16 @@ def preprocess(df):
     X_test = col_transf.transform(X_test)
     X_test = pd.DataFrame(X_test, columns=col_transf.get_feature_names_out())
 
-    # Log the transformer as an artifact
+    # TODO Log the transformer as an artifact
+    col_transf_path = 'models/column_transformer_model.joblib'
+    joblib.dump(col_transf, col_transf_path)
+    mlflow.log_artifact(col_transf_path)
+
 
     return col_transf, X_train, X_test, y_train, y_test
 
 
-def train(X_train, y_train):
+def train(X_train, y_train, max_iter):
     """
     Train a logistic regression model.
 
@@ -122,53 +132,82 @@ def train(X_train, y_train):
     Returns:
         LogisticRegression: trained logistic regression model
     """
-    log_reg = LogisticRegression(max_iter=1000)
+    log_reg = LogisticRegression(max_iter=max_iter)
     log_reg.fit(X_train, y_train)
 
-    ### Log the model with the input and output schema
-    # Infer signature (input and output schema)
+    ### TODO Log the model with the input and output schema
+    # TODO Infer signature (input and output schema)
+    signature = mlflow.models.infer_signature(X_train, y_train)
+    
+    # TODO Log model
+    mlflow.sklearn.log_model(log_reg, "Logistic Regression", signature=signature, input_example=X_train[:2])
 
-    # Log model
-
-    ### Log the data
-
+    ### TODO Log the data
+    dataset = mlflow.data.from_pandas(X_train, name="Churn Prediction Training")
+    mlflow.log_input(dataset, context="training")
+    
     return log_reg
 
+def eval_metrics(actual, pred):
+    '''
+    Docstring for eval_metrics
+    This function takes two params
+    
+    :param actual: array of the actual y data
+    :param pred: array of the predicted data by the model (y_hat)
+
+    returns: (accuracy, f1_score)
+    '''
+    accuracy = accuracy_score(actual, pred)
+    f1 = f1_score(actual, pred, pos_label=1)
+
+    return(accuracy, f1)
 
 def main():
-    ### Set the tracking URI for MLflow
-
-    ### Set the experiment name
-
-
-    ### Start a new run and leave all the main function code as part of the experiment
-
-    df = pd.read_csv("data/Churn_Modelling.csv")
-    col_transf, X_train, X_test, y_train, y_test = preprocess(df)
-
-    ### Log the max_iter parameter
-
-    model = train(X_train, y_train)
-
-    
-    y_pred = model.predict(X_test)
-
-    ### Log metrics after calculating them
+    max_iter = 1000
+    ### TODO Set the tracking URI for MLflow
+    mlflow.set_tracking_uri("http://localhost:5000")
 
 
-    ### Log tag
+    ### TODO set the experiment name
+    os.environ["LOGNAME"] = "Ahmed Gamal"
+    mlflow.set_experiment("Churn Prediction Experiment")
 
 
-    
-    conf_mat = confusion_matrix(y_test, y_pred, labels=model.classes_)
-    conf_mat_disp = ConfusionMatrixDisplay(
-        confusion_matrix=conf_mat, display_labels=model.classes_
-    )
-    conf_mat_disp.plot()
-    
-    # Log the image as an artifact in MLflow
-    
-    plt.show()
+    ### TODO Start a new run and leave all the main function code as part of the experiment
+    with mlflow.start_run(run_name="LR_basic") as run:
+            
+        df = pd.read_csv("dataset/Churn_Modelling.csv")
+        col_transf, X_train, X_test, y_train, y_test = preprocess(df)
+
+        ### TODO Log the max_iter parameter
+        mlflow.log_param("max_iter", max_iter)
+
+        model = train(X_train, y_train, max_iter)
+
+        
+        y_pred = model.predict(X_test)
+
+        ### TODO Log metrics after calculating them
+        accuracy, f1 = eval_metrics(y_test, y_pred)
+        mlflow.log_metrics({"Accuracy": accuracy, "F1 Score": f1})
+
+        ### TODO Log tag
+        mlflow.set_tag("run_id", run.info.run_id)
+
+        conf_mat = confusion_matrix(y_test, y_pred, labels=model.classes_)
+        conf_mat_disp = ConfusionMatrixDisplay(
+            confusion_matrix=conf_mat, display_labels=model.classes_
+        )
+        conf_mat_disp.plot()
+
+        plot_path = "./plots/confusion_matrix_lr.png"
+        plt.savefig(plot_path)
+
+        # TODO Log the image as an artifact in MLflow
+        mlflow.log_artifact(plot_path)
+        
+        #plt.show()
 
 
 if __name__ == "__main__":
